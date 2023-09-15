@@ -1,15 +1,23 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiManager.h>
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 #include "esp_camera.h"
 
 #define FlashLed 4
-const char* ssid = "LAB MOBILE";
-const char* password = "Pr0gram1ng";
-String serverName = "172.16.103.76";
-String serverPath = "/device/tambahfoto";
-const int serverPort = 8000;
+//const String url = "https://smarttrashku.com";
+const char* port = "8000";
+const char* url = "http://231.147.11.110";
+const char* path[] = {"/device/get","/device/send","/device/csrf/get"};
+const char* ssid = "HERBUDI";
+const char* password = "bondet92";
+const char* id_device = "fn6wM3n-lSq6cn3-jSM7QF2";
+const char* token = "e4HJxM6ve3VLab1qz2Bs4K80QcSS2V";
+unsigned long previousMillis = 0;
+const unsigned long interval = 3600000;
 WiFiClient client;
 // CAMERA_MODEL_AI_THINKER
 #define PWDN_GPIO_NUM     32
@@ -100,42 +108,103 @@ void setup() {
 
 void loop() {
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= Interval) {
-    Serial.println("Bersiap kirim foto ke server..");
-//    sendPhoto();
+  //setiap 1 jam 
+  if (currentMillis - previousMillis >= interval) {
+    // It's time to execute your function
+    postData("your_csrf_token_here");
+    // Update the previousMillis variable to the current time
     previousMillis = currentMillis;
   }
 }
-void postData(){
-  client.println(String("POST")+"/random " + " HTTP/1.1");
-  client.println("Host: " + serverName);
-  client.println("Connection: close");
-  client.println();
-  int timoutTimer = 10000;
-    long startTimer = millis();
-    boolean state = false;
-    Serial.println("Response:");
-    while ((startTimer + timoutTimer) > millis()) {
-      Serial.print(".");
-      delay(200);
-         
-      // Skip HTTP headers   
-      while (client.available()) {
-        char c = client.read();
-        if (c == '\n') {
-          if (AllData.length()==0) { state=true; }
-          AllData = "";
-        }
-        else if (c != '\r') { AllData += String(c); }
-        if (state==true) { DataBody += String(c); }
-        startTimer = millis();
-      }
-      if (DataBody.length()>0) { break; }
+void getData(){
+  HTTPClient http;
+  http.begin(url+":"+port+path[0]);
+  int code = http.GET();
+  Serial.println("getData");
+  if(code>0){
+    if(code == 200){
+      Serial.println("Http code get : "+String(code));
+      String payload = http.getString();
+      Serial.println(payload);
+    }else{
+      Serial.println("Error code : "+String(code));
+      Serial.println(http.getString());
     }
-    client.stop();
-    Serial.println(DataBody);
-    Serial.println("##############");
-    Serial.println();
+  }else{
+    Serial.println("error code : "+String(code));
+  }
+}
+String getCsrf(){
+  Serial.println("get csrf");
+  HTTPClient http;
+  http.begin(url+":"+port+path[2]);
+  Serial.println("set url");
+  int code = http.GET();
+  Serial.println("get data from server");
+  if(code>0){
+    if(code == 200){
+      Serial.println("Http code get : "+String(code));
+      String response = http.getString();
+      Serial.println(response);
+      DynamicJsonDocument jsonDocument(2048);
+//      StaticJsonDocument <1024> jsonDocument;
+      DeserializationError error = deserializeJson(jsonDocument, response);
+      if(error){
+        Serial.print("JSON parsing failed: ");
+        Serial.println(error.c_str());
+      }else{
+        const char* csrfToken = jsonDocument["csrf_token"];
+        Serial.print("CSRF Token: ");
+        Serial.println(csrfToken);
+        return csrfToken;
+      }
+    }else{
+      Serial.println("Error code : "+String(code));
+      Serial.println(http.getString());
+      return "";
+    }
+  }else{
+    Serial.println("error code : "+String(code));
+    return "";
+  }
+}
+void postData(String csrf){
+//  if(csrf == ""){
+//    return;
+//  }
+  Serial.println("send post data");
+  HTTPClient http;
+  DynamicJsonDocument jsonData(1024);
+  http.begin(url+":"+port+path[1]);
+  http.addHeader("Content-Type", "application/json");
+  jsonData["id_device"] = id_device;
+  jsonData["token"] = token;
+  jsonData["organik"] = random(101);
+  jsonData["anorganik"] = random(101);
+  String request;
+  serializeJson(jsonData, request);
+  int code = http.POST(request);
+  Serial.println("code success");
+  if(code>0){
+    if(code == 200){
+      Serial.println("Http code get : "+String(code));
+      String response = http.getString();
+      DynamicJsonDocument jsonResponse(1024);
+      deserializeJson(jsonResponse, response);
+      Serial.println(response);
+      String jsonStr;
+      serializeJson(jsonResponse, jsonStr);
+      Serial.println();
+      Serial.println(jsonStr);
+    }else{
+      Serial.println("Error code : "+String(code));
+      Serial.println(http.getString());
+    }
+  }else{
+    Serial.println("error code : "+String(code));
+    String response = http.getString();
+    Serial.println(response);
+  }
 }
 void sendPhoto() {
   String AllData;
