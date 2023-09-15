@@ -38,8 +38,6 @@ WiFiClient client;
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
-const int Interval = 3000;    // proses pengambilan photo interval 30 detik
-unsigned long previousMillis = 0; 
 String jsonres;
 
 void setup() {
